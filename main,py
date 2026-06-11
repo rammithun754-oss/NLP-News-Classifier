@@ -1,0 +1,308 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# ====================================
+# 1. Dataset
+# ====================================
+
+news_articles = [
+
+    # Technology
+    "apple launches new ai smartphone",
+    "google releases advanced language model",
+    "new software improves cybersecurity",
+    "artificial intelligence transforms industries",
+
+    # Sports
+    "india wins cricket world cup",
+    "football team secures championship victory",
+    "star player scores winning goal",
+    "tennis champion wins tournament",
+
+    # Business
+    "stock market reaches record high",
+    "company reports strong quarterly profits",
+    "investors buy technology shares",
+    "startup raises funding from investors",
+
+    # Science
+    "scientists discover new exoplanet",
+    "researchers develop advanced vaccine",
+    "space telescope captures galaxy image",
+    "new study reveals climate patterns"
+]
+
+labels = [
+
+    "technology",
+    "technology",
+    "technology",
+    "technology",
+
+    "sports",
+    "sports",
+    "sports",
+    "sports",
+
+    "business",
+    "business",
+    "business",
+    "business",
+
+    "science",
+    "science",
+    "science",
+    "science"
+]
+
+# ====================================
+# 2. Tokenization
+# ====================================
+
+tokenized_articles = [
+    article.lower().split()
+    for article in news_articles
+]
+
+# ====================================
+# 3. Build Vocabulary
+# ====================================
+
+vocab = {}
+index = 1
+
+for article in tokenized_articles:
+
+    for word in article:
+
+        if word not in vocab:
+
+            vocab[word] = index
+            index += 1
+
+print("Vocabulary Size:", len(vocab))
+
+# ====================================
+# 4. Label Mapping
+# ====================================
+
+label_to_index = {
+    "technology": 0,
+    "sports": 1,
+    "business": 2,
+    "science": 3
+}
+
+index_to_label = {
+    v: k
+    for k, v in label_to_index.items()
+}
+
+# ====================================
+# 5. Convert Words → IDs
+# ====================================
+
+sequences = []
+
+for article in tokenized_articles:
+
+    seq = []
+
+    for word in article:
+
+        seq.append(vocab[word])
+
+    sequences.append(seq)
+
+# ====================================
+# 6. Padding
+# ====================================
+
+max_length = max(
+    len(seq)
+    for seq in sequences
+)
+
+padded_sequences = []
+
+for seq in sequences:
+
+    padded = seq + [0] * (
+        max_length - len(seq)
+    )
+
+    padded_sequences.append(padded)
+
+# ====================================
+# 7. Convert To Tensors
+# ====================================
+
+X = torch.tensor(
+    padded_sequences,
+    dtype=torch.long
+)
+
+y = torch.tensor(
+    [label_to_index[label]
+     for label in labels],
+    dtype=torch.long
+)
+
+print("Input Shape:", X.shape)
+print("Target Shape:", y.shape)
+
+# ====================================
+# 8. LSTM Model
+# ====================================
+
+class NewsClassifier(nn.Module):
+
+    def __init__(
+        self,
+        vocab_size,
+        embedding_dim,
+        hidden_size,
+        num_classes
+    ):
+
+        super().__init__()
+
+        self.embedding = nn.Embedding(
+            num_embeddings=vocab_size,
+            embedding_dim=embedding_dim
+        )
+
+        self.lstm = nn.LSTM(
+            input_size=embedding_dim,
+            hidden_size=hidden_size,
+            num_layers=2,
+            batch_first=True
+        )
+
+        self.fc = nn.Linear(
+            hidden_size,
+            num_classes
+        )
+
+    def forward(self, x):
+
+        embedded = self.embedding(x)
+
+        output, (hidden, cell) = self.lstm(
+            embedded
+        )
+
+        final_hidden = hidden[-1]
+
+        out = self.fc(final_hidden)
+
+        return out
+
+# ====================================
+# 9. Initialize Model
+# ====================================
+
+vocab_size = len(vocab) + 1
+
+model = NewsClassifier(
+    vocab_size=vocab_size,
+    embedding_dim=16,
+    hidden_size=32,
+    num_classes=4
+)
+
+criterion = nn.CrossEntropyLoss()
+
+optimizer = optim.Adam(
+    model.parameters(),
+    lr=0.01
+)
+
+# ====================================
+# 10. Training
+# ====================================
+
+epochs = 500
+
+for epoch in range(epochs):
+
+    optimizer.zero_grad()
+
+    outputs = model(X)
+
+    loss = criterion(outputs, y)
+
+    loss.backward()
+
+    optimizer.step()
+
+    if (epoch + 1) % 100 == 0:
+
+        print(
+            f"Epoch {epoch+1}"
+            f" | Loss: {loss.item():.4f}"
+        )
+
+# ====================================
+# 11. Prediction Function
+# ====================================
+
+def predict_news(text):
+
+    words = text.lower().split()
+
+    sequence = []
+
+    for word in words:
+
+        if word in vocab:
+            sequence.append(vocab[word])
+
+        else:
+            sequence.append(0)
+
+    while len(sequence) < max_length:
+        sequence.append(0)
+
+    sequence = sequence[:max_length]
+
+    tensor = torch.tensor(
+        [sequence],
+        dtype=torch.long
+    )
+
+    with torch.no_grad():
+
+        prediction = model(tensor)
+
+        predicted_class = torch.argmax(
+            prediction,
+            dim=1
+        ).item()
+
+    print("\nNews:", text)
+    print(
+        "Category:",
+        index_to_label[predicted_class]
+    )
+
+# ====================================
+# 12. Testing
+# ====================================
+
+predict_news(
+    "new ai software released by google"
+)
+
+predict_news(
+    "india wins cricket championship"
+)
+
+predict_news(
+    "stock market investors gain profits"
+)
+
+predict_news(
+    "scientists discover new planet"
+)
